@@ -22,7 +22,15 @@ export class AuthService {
 
   async signUpUser(data: SignUpDto): Promise<object> {
     try {
-      const email = data.email;
+      const email = data.email.toLowerCase();
+      if(!data.email || !data.name) {
+        const res = {
+          status: 500,
+          message: 'name or email missing',
+          data: null,
+        };
+        return res;
+      }
       const user = await this.userModel.findOne({ email: email });
       const passwordExists = await this.userModel.findOne({
         email: email,
@@ -119,6 +127,15 @@ export class AuthService {
 
   async verifyOtp(email: string, otp: string): Promise<object> {
     try {
+      if(!email || !otp) {
+        const res = {
+          status: 500,
+          message: 'email or otp missing',
+          data: null,
+        };
+        return res;
+      }
+      email = email.toLowerCase();
       const user = await this.userModel.findOne({ email: email });
 
       if (!user) {
@@ -180,6 +197,15 @@ export class AuthService {
 
   async resendOtp(email: string): Promise<object> {
     try {
+      if(!email) {
+        const res = {
+          status: 500,
+          message: 'email missing',
+          data: null,
+        };
+        return res;
+      }
+      email = email.toLowerCase();
       const user = await this.userModel.findOne({ email: email });
       const passwordExists = await this.userModel.findOne({
         email: email,
@@ -196,7 +222,7 @@ export class AuthService {
         return res;
       }
       
-      if (user.isVerified === false || passwordExists === null) {
+      if (passwordExists === null) {
         return await this.sendEmails(user,200,400,verifyEmailTemplate);
        }else{
         return await this.sendEmails(user,200,400,forgotPasswordTemplate);
@@ -255,7 +281,15 @@ export class AuthService {
 
   async setPassword(data: LogInDto): Promise<object> {
     try {
-      const email = data.email;
+      if(!data.email || !data.password) {
+        const res = {
+          status: 500,
+          message: 'password or email missing',
+          data: null,
+        };
+        return res;
+      }
+      const email = data.email.toLowerCase();
       const user = await this.userModel.findOne({ email });
       if (!user) {
         const res = {
@@ -301,27 +335,36 @@ export class AuthService {
 
   async forgotPassword(email: string): Promise<object> {
     try {
-      const user = await this.userModel.findOne({ email });
+      if(!email) {
+        const res = {
+          status: 500,
+          message: 'email missing',
+          data: null,
+        };
+        return res;
+      }
+      email = email.toLowerCase();
+      // const user = await this.userModel.findOne({ email });
       const passwordExists = await this.userModel.findOne({
         email: email,
         password: { $exists: true },
       });
-      if (!user) {
+      if (passwordExists === null) {
         const res = {
           status: 404,
-          message: 'User not found',
+          message: 'Please create your account',
           data: null,
         };
         return res;
       } else {
-        if (user.isVerified === false || passwordExists === null) {
-          const res = {
-            status: 400,
-            message: 'Please complete your registration',
-            data: null,
-          };
-          return res;
-        }
+        // if (user.isVerified === false || passwordExists === null) {
+        //   const res = {
+        //     status: 400,
+        //     message: 'Please complete your registration',
+        //     data: null,
+        //   };
+        //   return res;
+        // }
         // const otp = this.generateSixDigitCode();
         // const isSent = await this.mailService.sendEmail(
         //   user,
@@ -352,7 +395,7 @@ export class AuthService {
         //     return res;
         //   }
         // }
-        return await this.sendEmails(user,200,400,forgotPasswordTemplate);
+        return await this.sendEmails(passwordExists,200,400,forgotPasswordTemplate);
       }
     } catch (err) {
       console.log(err);
@@ -367,31 +410,41 @@ export class AuthService {
 
   async loginUser(data: LogInDto): Promise<object> {
     try {
-      const email = data.email;
+      const email = data.email.toLowerCase();
       const password = data.password;
-      const user = await this.userModel.findOne({ email });
+      if(!data.email || !data.password) {
+        const res = {
+          status: 500,
+          message: 'email or password missing',
+          data: null,
+        };
+        return res;
+      }
+      // const user = await this.userModel.findOne({ email });
       const passwordExists = await this.userModel.findOne({
         email: email,
         password: { $exists: true },
       });
-      if (user && passwordExists === null) {
+      if (passwordExists === null) {
         const res = {
           status: 404,
-          message: 'Please complete your registration',
+          message: 'Please register yourself',
           data: null,
         };
         return res;
       }
       if (passwordExists != null) {
-        const pass = await bcrypt.compare(password, user.password);
+        console.log(' from login');
+
+        const pass = await bcrypt.compare(password, passwordExists.password);
         console.log(pass + ' from login');
-        const payload = { id: user._id };
+        const payload = { id: passwordExists._id };
         const token = await this.generateJWT.genToken(payload);
         if (pass) {
           const res = {
             status: 200,
             message: 'Sign-in Successfully',
-            data: user,
+            data: passwordExists,
             token,
           };
           return res;
@@ -405,14 +458,14 @@ export class AuthService {
           return res;
         }
       }
-      if (!user) {
-        const res = {
-          status: 400,
-          message: 'Invalid Credentials',
-          data: null,
-        };
-        return res;
-      }
+      // if (!user) {
+      //   const res = {
+      //     status: 400,
+      //     message: 'Invalid Credentials',
+      //     data: null,
+      //   };
+      //   return res;
+      // }
     } catch (err) {
       console.log(err);
       const res = {

@@ -8,11 +8,16 @@ export class UserData {
   @Prop()
   name: string;
 
-  @Prop({ unique: [true, 'Email already exists'] })
-  // @Prop()
+  @Prop({
+    unique: [true, 'Email already exists'],
+    set: (value: string) => value.toLowerCase(),
+  })
   email: string;
 
-  @Prop({ minlength: 6, message: 'password length should be greater then 6' })
+  @Prop({
+    minlength: 6,
+    message: 'Password length should be greater than 6',
+  })
   password: string;
 
   @Prop({ type: Object })

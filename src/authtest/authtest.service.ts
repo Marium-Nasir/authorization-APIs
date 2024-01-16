@@ -52,23 +52,32 @@ export class AuthtestService {
     const payload = { id: user._id };
     const time = 120;
     const token = await this.genJWT.genTokenForLink(payload, time);
-    // console.log(token + ' token');
-    const link = `http://localhost:3000/authtest/verify-link/${token}`;
-    if (!link) {
+    if (token) {
+      // console.log(token + ' token');
+      const link = `http://localhost:3000/authtest/verify-link/${token}`;
+
+      return link;
+    } else {
       const res = {
         status: 404,
         message: 'link not generated',
         data: null,
       };
       return res;
-    } else {
-      return link;
     }
   }
 
   async signUp(data: SignUpDto): Promise<object> {
     try {
-      const email = data.email;
+      const email = data.email.toLowerCase();
+      if(!data.email || !data.name) {
+        const res = {
+          status: 500,
+          message: 'name or email missing',
+          data: null,
+        };
+        return res;
+      }
       const user = await this.clientModel.findOne({ email });
       const passwordExists = await this.clientModel.findOne({
         email: email,
@@ -128,6 +137,14 @@ export class AuthtestService {
 
   async verifyLink(token: string): Promise<any> {
     try {
+      if(!token) {
+        const res = {
+          status: 500,
+          message: 'token is missing',
+          data: null,
+        };
+        return res;
+      }
       const verifiedToken = await this.genJWT.verifyToken(token);
 
       if (verifiedToken === false) {
@@ -175,21 +192,30 @@ export class AuthtestService {
   }
 
   async resendEmail(email: string): Promise<any> {
-    try{
-      const user = await this.clientModel.findOne({email});
+    try {
+      if(!email) {
+        const res = {
+          status: 500,
+          message: 'email is missing',
+          data: null,
+        };
+        return res;
+      }
+      email = email.toLowerCase();
+      const user = await this.clientModel.findOne({ email });
       const passwordExists = await this.clientModel.findOne({
         email: email,
         password: { $exists: true },
       });
-      if(!user) {
+      if (!user) {
         const res = {
           status: 404,
           message: 'user not exists',
           data: null,
         };
         return res;
-      }else {
-        if(passwordExists != null) {
+      } else {
+        if (passwordExists != null) {
           const link = await this.generateLink(user);
           if (typeof link === 'string') {
             return await this.sendEmails(
@@ -203,7 +229,7 @@ export class AuthtestService {
           } else {
             return link;
           }
-        }else { 
+        } else {
           const link = await this.generateLink(user);
           if (typeof link === 'string') {
             return await this.sendEmails(
@@ -219,7 +245,7 @@ export class AuthtestService {
           }
         }
       }
-    }catch (err) {
+    } catch (err) {
       console.log(err);
       const res = {
         status: 500,
@@ -231,92 +257,113 @@ export class AuthtestService {
   }
 
   async setPassword(data: LogInDto): Promise<any> {
-    try{
-      const email = data.email;
+    try {
+      if(!data.email || !data.password) {
+        const res = {
+          status: 500,
+          message: 'email or password missing',
+          data: null,
+        };
+        return res;
+      }
+      const email = data.email.toLowerCase();
       const password = data.password;
-      const user = await this.clientModel.findOne({email});
-      if(user && user.isVerified === false){
+      const user = await this.clientModel.findOne({ email });
+      if (user && user.isVerified === false) {
         const res = {
           status: 400,
-          message:"Please complete your registration",
+          message: 'Please complete your registration',
           data: null,
-        }
+        };
         return res;
       }
-      if(!user) {
+      if (!user) {
         const res = {
           status: 404,
-          message:"User not exists",
+          message: 'User not exists',
           data: null,
-        }
+        };
         return res;
       }
-      if(user && user.isVerified === true) {
-        const hashedPassword = await bcryptjs.hash(password,10);
-        const updatePassword = await this.clientModel.findOneAndUpdate({email},{password: hashedPassword},{new:true});
-        if(updatePassword) {
+      if (user && user.isVerified === true) {
+        const hashedPassword = await bcryptjs.hash(password, 10);
+        const updatePassword = await this.clientModel.findOneAndUpdate(
+          { email },
+          { password: hashedPassword },
+          { new: true },
+        );
+        if (updatePassword) {
           const res = {
             status: 200,
-            message:"Password update successfully",
+            message: 'Password updated successfully',
             data: updatePassword,
-          }
+          };
           return res;
         }
       }
-    }catch(err){
+    } catch (err) {
       console.log(err);
       const res = {
         status: 500,
-        message:"Error during set/reset password",
+        message: 'Error during set/reset password',
         data: err,
-      }
+      };
       return res;
     }
   }
 
   async forgotPassword(email: string): Promise<any> {
-    try{
-      const user = await this.clientModel.findOne({email});
+    try {
+      if(!email) {
+        const res = {
+          status: 500,
+          message: 'email is missing',
+          data: null,
+        };
+        return res;
+      }
+      email = email.toLowerCase();
+      // const user = await this.clientModel.findOne({ email });
       const passwordExists = await this.clientModel.findOne({
         email: email,
         password: { $exists: true },
       });
-      if(!user) {
-        const res = {
-          status: 404,
-          message: "User not exists",
-          data: null,
-        }
-        return res;
-      }
-      if(user && passwordExists != null) {
-        const link = await this.generateLink(user);
+      // if (!user) {
+      //   const res = {
+      //     status: 404,
+      //     message: 'User not exists',
+      //     data: null,
+      //   };
+      //   return res;
+      // }
+      if ( passwordExists != null) {
+        const link = await this.generateLink(passwordExists);
         if (typeof link === 'string') {
           return await this.sendEmails(
-            user,
+            passwordExists,
             200,
             400,
             link,
             forgotPasswordLinkTemplate,
-            user,
+            passwordExists,
           );
         } else {
           return link;
         }
       } else {
         const res = {
-          status: 400,
-          message: "Please complete your registration",
+          status: 404,
+          message: 'Please create your account',
           data: null,
-        }
+        };
         return res;
       }
-    }catch(err){
+    } catch (err) {
       const res = {
         status: 500,
-        message: "Error during forgot request",
+        message: 'Error during forgot request',
         data: err,
-      }
+      };
       return res;
     }
   }
@@ -343,7 +390,7 @@ export class AuthtestService {
         console.log(pass + ' from login');
         const payload = { id: user._id };
         const time = 7200;
-        const token = await this.genJWT.genTokenForLink(payload,time);
+        const token = await this.genJWT.genTokenForLink(payload, time);
         if (pass) {
           const res = {
             status: 200,
