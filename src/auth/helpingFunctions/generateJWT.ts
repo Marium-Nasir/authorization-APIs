@@ -9,9 +9,4 @@ export class GenerateToken {
     const token = await this.jwtService.signAsync(payload);
     return token;
   }
-
-//   async decodeToken(token: string) {
-//     const decode = await this.jwtService.decode(token);
-//     return decode;
-//   }
 }
