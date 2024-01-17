@@ -10,6 +10,7 @@ import { verifyEmailLinkTemplate } from 'src/mail/templates/verifywithlink';
 import { forgotPasswordLinkTemplate } from 'src/mail/templates/forgotwithlink';
 import { LogInDto } from 'src/auth/dto/login.dto';
 import * as bcryptjs from 'bcryptjs';
+import { validate } from 'class-validator';
 
 @Injectable()
 export class AuthtestService {
@@ -69,8 +70,7 @@ export class AuthtestService {
 
   async signUp(data: SignUpDto): Promise<object> {
     try {
-      const email = data.email.toLowerCase();
-      if(!data.email || !data.name) {
+      if (data.email === undefined || data.name === undefined) {
         const res = {
           status: 500,
           message: 'name or email missing',
@@ -78,51 +78,65 @@ export class AuthtestService {
         };
         return res;
       }
-      const user = await this.clientModel.findOne({ email });
-      const passwordExists = await this.clientModel.findOne({
-        email: email,
-        password: { $exists: true },
-      });
-      if (user && passwordExists === null) {
-        const link = await this.generateLink(user);
-        if (typeof link === 'string') {
-          return await this.sendEmails(
-            data,
-            200,
-            400,
-            link,
-            verifyEmailLinkTemplate,
-            user,
-          );
-        } else {
-          return link;
-        }
-      }
-      if (!user) {
-        const newUser = await this.clientModel.create(data);
-        if (newUser) {
-          const link = await this.generateLink(newUser);
-          if (typeof link === 'string') {
-            return await this.sendEmails(
-              data,
-              201,
-              400,
-              link,
-              verifyEmailLinkTemplate,
-              newUser,
-            );
-          } else {
-            return link;
-          }
-        }
-      }
-      if (user && passwordExists != null) {
+      const email = data.email.toLowerCase();
+      const signUpData = new SignUpDto();
+      signUpData.email = data.email;
+      signUpData.name = data.name;
+      const validationErrors = await validate(signUpData);
+      console.log(validationErrors + ' from validation');
+
+      if (validationErrors.length > 0) {
         const res = {
-          status: 200,
-          message: 'User already exists',
-          data: null,
+          status: 400,
+          message: 'Validation failed',
+          data: validationErrors,
         };
         return res;
+      } else {
+        const user = await this.clientModel.findOne({ email: email });
+        if (user) {
+          if (user.password) {
+            const res = {
+              status: 400,
+              message: 'Account already exists',
+              data: null,
+            };
+            return res;
+          } else {
+            const link = await this.generateLink(user);
+                if (typeof link === 'string') {
+                   return await this.sendEmails(
+                    data,
+                    200,
+                    400,
+                    link,
+                    verifyEmailLinkTemplate,
+                    user,
+                  );
+                }
+                else {
+                  return link;
+                }
+          }
+        }
+        if (!user) {
+          const newUser = await this.clientModel.create(data);
+          if (newUser) {
+            const link = await this.generateLink(newUser);
+            if (typeof link === 'string') {
+              return await this.sendEmails(
+                data,
+                201,
+                400,
+                link,
+                verifyEmailLinkTemplate,
+                newUser,
+              );
+            } else {
+              return link;
+            }
+          }
+        }
       }
     } catch (err) {
       console.log(err);
@@ -137,7 +151,7 @@ export class AuthtestService {
 
   async verifyLink(token: string): Promise<any> {
     try {
-      if(!token) {
+      if (!token || token === undefined) {
         const res = {
           status: 500,
           message: 'token is missing',
@@ -193,7 +207,7 @@ export class AuthtestService {
 
   async resendEmail(email: string): Promise<any> {
     try {
-      if(!email) {
+      if (email === undefined) {
         const res = {
           status: 500,
           message: 'email is missing',
@@ -202,20 +216,29 @@ export class AuthtestService {
         return res;
       }
       email = email.toLowerCase();
-      const user = await this.clientModel.findOne({ email });
-      const passwordExists = await this.clientModel.findOne({
-        email: email,
-        password: { $exists: true },
-      });
-      if (!user) {
+      const signUpData = new SignUpDto();
+      signUpData.email = email;
+      const validationErrors = await validate(signUpData);
+      console.log(validationErrors + ' from validation');
+
+      if (validationErrors.length > 0) {
         const res = {
-          status: 404,
-          message: 'user not exists',
-          data: null,
+          status: 400,
+          message: 'Validation failed',
+          data: validationErrors,
         };
         return res;
       } else {
-        if (passwordExists != null) {
+        const user = await this.clientModel.findOne({ email: email });
+        if (!user) {
+          const res = {
+            status: 404,
+            message: 'User not found',
+            data: null,
+          };
+          return res;
+        }
+        if (user.password) {
           const link = await this.generateLink(user);
           if (typeof link === 'string') {
             return await this.sendEmails(
@@ -245,6 +268,49 @@ export class AuthtestService {
           }
         }
       }
+      // const user = await this.clientModel.findOne({ email });
+      // const passwordExists = await this.clientModel.findOne({
+      //   email: email,
+      //   password: { $exists: true },
+      // });
+      // if (!user) {
+      //   const res = {
+      //     status: 404,
+      //     message: 'user not exists',
+      //     data: null,
+      //   };
+      //   return res;
+      // } else {
+      //   if (passwordExists != null) {
+      //     const link = await this.generateLink(user);
+      //     if (typeof link === 'string') {
+      //       return await this.sendEmails(
+      //         user,
+      //         200,
+      //         400,
+      //         link,
+      //         forgotPasswordLinkTemplate,
+      //         user,
+      //       );
+      //     } else {
+      //       return link;
+      //     }
+      //   } else {
+      //     const link = await this.generateLink(user);
+      //     if (typeof link === 'string') {
+      //       return await this.sendEmails(
+      //         user,
+      //         200,
+      //         400,
+      //         link,
+      //         verifyEmailLinkTemplate,
+      //         user,
+      //       );
+      //     } else {
+      //       return link;
+      //     }
+      //   }
+      // }
     } catch (err) {
       console.log(err);
       const res = {
@@ -258,7 +324,7 @@ export class AuthtestService {
 
   async setPassword(data: LogInDto): Promise<any> {
     try {
-      if(!data.email || !data.password) {
+      if (data.email === undefined || data.password === undefined) {
         const res = {
           status: 500,
           message: 'email or password missing',
@@ -268,39 +334,86 @@ export class AuthtestService {
       }
       const email = data.email.toLowerCase();
       const password = data.password;
-      const user = await this.clientModel.findOne({ email });
-      if (user && user.isVerified === false) {
+      const setPasswordData = new LogInDto();
+      setPasswordData.email = data.email;
+      setPasswordData.password = data.password;
+      const validationErrors = await validate(setPasswordData);
+      console.log(validationErrors + ' from validation');
+
+      if (validationErrors.length > 0) {
         const res = {
           status: 400,
-          message: 'Please complete your registration',
-          data: null,
+          message: 'Validation failed',
+          data: validationErrors,
         };
         return res;
-      }
-      if (!user) {
-        const res = {
-          status: 404,
-          message: 'User not exists',
-          data: null,
-        };
-        return res;
-      }
-      if (user && user.isVerified === true) {
-        const hashedPassword = await bcryptjs.hash(password, 10);
-        const updatePassword = await this.clientModel.findOneAndUpdate(
-          { email },
-          { password: hashedPassword },
-          { new: true },
-        );
-        if (updatePassword) {
+      } else {
+        const user = await this.clientModel.findOne({ email });
+        if (!user) {
           const res = {
-            status: 200,
-            message: 'Password updated successfully',
-            data: updatePassword,
+            status: 404,
+            message: 'User not found',
+            data: null,
+          };
+          return res;
+        }
+        if (user.isVerified === true) {
+          const hashedPassword = await bcryptjs.hash(password, 10);
+          const setPass = await this.clientModel.findOneAndUpdate(
+            { email },
+            { password: hashedPassword },
+            { new: true },
+          );
+          if (setPass) {
+            const res = {
+              status: 200,
+              message: 'Password set successfully',
+              data: setPass,
+            };
+            return res;
+          }
+        } else {
+          const res = {
+            status: 400,
+            message: 'Email not verified',
+            data: null,
           };
           return res;
         }
       }
+      // const user = await this.clientModel.findOne({ email });
+      // if (user && user.isVerified === false) {
+      //   const res = {
+      //     status: 400,
+      //     message: 'Please complete your registration',
+      //     data: null,
+      //   };
+      //   return res;
+      // }
+      // if (!user) {
+      //   const res = {
+      //     status: 404,
+      //     message: 'User not exists',
+      //     data: null,
+      //   };
+      //   return res;
+      // }
+      // if (user && user.isVerified === true) {
+      //   const hashedPassword = await bcryptjs.hash(password, 10);
+      //   const updatePassword = await this.clientModel.findOneAndUpdate(
+      //     { email },
+      //     { password: hashedPassword },
+      //     { new: true },
+      //   );
+      //   if (updatePassword) {
+      //     const res = {
+      //       status: 200,
+      //       message: 'Password updated successfully',
+      //       data: updatePassword,
+      //     };
+      //     return res;
+      //   }
+      // }
     } catch (err) {
       console.log(err);
       const res = {
@@ -314,7 +427,7 @@ export class AuthtestService {
 
   async forgotPassword(email: string): Promise<any> {
     try {
-      if(!email) {
+      if (email === undefined) {
         const res = {
           status: 500,
           message: 'email is missing',
@@ -323,41 +436,80 @@ export class AuthtestService {
         return res;
       }
       email = email.toLowerCase();
-      // const user = await this.clientModel.findOne({ email });
-      const passwordExists = await this.clientModel.findOne({
-        email: email,
-        password: { $exists: true },
-      });
-      // if (!user) {
+      const signUpData = new SignUpDto();
+      signUpData.email = email;
+      const validationErrors = await validate(signUpData);
+      console.log(validationErrors + ' from validation');
+
+      if (validationErrors.length > 0) {
+        const res = {
+          status: 400,
+          message: 'Validation failed',
+          data: validationErrors,
+        };
+        return res;
+      } else {
+        const passwordExists = await this.clientModel.findOne({
+          email: email,
+          password: { $exists: true },
+        });
+        if (passwordExists === null) {
+          const res = {
+            status: 404,
+            message: 'User not found',
+            data: null,
+          };
+          return res;
+        } else {
+          const link = await this.generateLink(passwordExists);
+          if (typeof link === 'string') {
+            return await this.sendEmails(
+              passwordExists,
+              200,
+              400,
+              link,
+              forgotPasswordLinkTemplate,
+              passwordExists,
+            );
+          } else {
+            return link;
+          }
+        }
+      }
+      // const passwordExists = await this.clientModel.findOne({
+      //   email: email,
+      //   password: { $exists: true },
+      // });
+      // // if (!user) {
+      // //   const res = {
+      // //     status: 404,
+      // //     message: 'User not exists',
+      // //     data: null,
+      // //   };
+      // //   return res;
+      // // }
+      // if (passwordExists != null) {
+      //   const link = await this.generateLink(passwordExists);
+      //   if (typeof link === 'string') {
+      //     return await this.sendEmails(
+      //       passwordExists,
+      //       200,
+      //       400,
+      //       link,
+      //       forgotPasswordLinkTemplate,
+      //       passwordExists,
+      //     );
+      //   } else {
+      //     return link;
+      //   }
+      // } else {
       //   const res = {
       //     status: 404,
-      //     message: 'User not exists',
+      //     message: 'Please create your account',
       //     data: null,
       //   };
       //   return res;
       // }
-      if ( passwordExists != null) {
-        const link = await this.generateLink(passwordExists);
-        if (typeof link === 'string') {
-          return await this.sendEmails(
-            passwordExists,
-            200,
-            400,
-            link,
-            forgotPasswordLinkTemplate,
-            passwordExists,
-          );
-        } else {
-          return link;
-        }
-      } else {
-        const res = {
-          status: 404,
-          message: 'Please create your account',
-          data: null,
-        };
-        return res;
-      }
     } catch (err) {
       const res = {
         status: 500,
@@ -370,53 +522,114 @@ export class AuthtestService {
 
   async loginUser(data: LogInDto): Promise<object> {
     try {
-      const email = data.email;
-      const password = data.password;
-      const user = await this.clientModel.findOne({ email });
-      const passwordExists = await this.clientModel.findOne({
-        email: email,
-        password: { $exists: true },
-      });
-      if (user && passwordExists === null) {
+      if (data.email === undefined || data.password === undefined) {
         const res = {
-          status: 404,
-          message: 'Please complete your registration',
+          status: 500,
+          message: 'email or password missing',
           data: null,
         };
         return res;
       }
-      if (passwordExists != null) {
-        const pass = await bcryptjs.compare(password, user.password);
-        console.log(pass + ' from login');
-        const payload = { id: user._id };
-        const time = 7200;
-        const token = await this.genJWT.genTokenForLink(payload, time);
-        if (pass) {
+      const email = data.email;
+      const password = data.password;
+      const setPasswordData = new SignUpDto();
+      setPasswordData.email = email;
+      const validationErrors = await validate(setPasswordData);
+      console.log(validationErrors + ' from validation');
+
+      if (validationErrors.length > 0) {
+        const res = {
+          status: 400,
+          message: 'Validation failed',
+          data: validationErrors,
+        };
+        return res;
+      } else {
+        const passwordExists = await this.clientModel.findOne({
+          email: email,
+          password: { $exists: true },
+        });
+        if (passwordExists === null) {
           const res = {
-            status: 200,
-            message: 'Sign-in Successfully',
-            data: user,
-            token,
-          };
-          return res;
-        }
-        if (!pass) {
-          const res = {
-            status: 400,
-            message: 'Invalid Credentials',
+            status: 404,
+            message: 'Please create your account',
             data: null,
           };
           return res;
         }
+        if (passwordExists != null) {
+          const pass = await bcryptjs.compare(
+            password,
+            passwordExists.password,
+          );
+          console.log(pass + ' from login');
+          const payload = { id: passwordExists._id };
+          const time = 7200;
+          const token = await this.genJWT.genTokenForLink(payload, time);
+          if (pass) {
+            const res = {
+              status: 200,
+              message: 'Sign-in Successfully',
+              data: passwordExists,
+              token,
+            };
+            return res;
+          }
+          if (!pass) {
+            const res = {
+              status: 400,
+              message: 'Invalid Credentials',
+              data: null,
+            };
+            return res;
+          }
+        }
       }
-      if (!user) {
-        const res = {
-          status: 400,
-          message: 'Invalid Credentials',
-          data: null,
-        };
-        return res;
-      }
+      // const user = await this.clientModel.findOne({ email });
+      // const passwordExists = await this.clientModel.findOne({
+      //   email: email,
+      //   password: { $exists: true },
+      // });
+      // if (user && passwordExists === null) {
+      //   const res = {
+      //     status: 404,
+      //     message: 'Please complete your registration',
+      //     data: null,
+      //   };
+      //   return res;
+      // }
+      // if (passwordExists != null) {
+      //   const pass = await bcryptjs.compare(password, user.password);
+      //   console.log(pass + ' from login');
+      //   const payload = { id: user._id };
+      //   const time = 7200;
+      //   const token = await this.genJWT.genTokenForLink(payload, time);
+      //   if (pass) {
+      //     const res = {
+      //       status: 200,
+      //       message: 'Sign-in Successfully',
+      //       data: user,
+      //       token,
+      //     };
+      //     return res;
+      //   }
+      //   if (!pass) {
+      //     const res = {
+      //       status: 400,
+      //       message: 'Invalid Credentials',
+      //       data: null,
+      //     };
+      //     return res;
+      //   }
+      // }
+      // if (!user) {
+      //   const res = {
+      //     status: 400,
+      //     message: 'Invalid Credentials',
+      //     data: null,
+      //   };
+      //   return res;
+      // }
     } catch (err) {
       console.log(err);
       const res = {

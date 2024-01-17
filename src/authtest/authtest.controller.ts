@@ -10,6 +10,10 @@ export class AuthtestController {
   @Post('sign-up')
   async signClient(@Body() data: SignUpDto, @Res() res): Promise<any> {
     const response: any = await this.authTestService.signUp(data);
+    console.log(response + ' response');
+    
+    console.log(response.status + " from controller");
+    
     res.status(response.status).json(response);
   }
 

@@ -1,6 +1,10 @@
 /* eslint-disable prettier/prettier */
+import { IsEmail, IsNotEmpty } from 'class-validator';
 export class SignUpDto {
-    name: string;
-    email: string;
-  }
-  
+  @IsNotEmpty({ message: 'email is required' })
+  @IsEmail({}, { message: 'Invalid email format' })
+  email: string;
+
+  // @IsNotEmpty({ message: 'Name is required' })
+  name?: string
+}

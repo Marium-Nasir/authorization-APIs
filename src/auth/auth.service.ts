@@ -10,6 +10,8 @@ import * as bcrypt from 'bcryptjs';
 import { verifyEmailTemplate } from 'src/mail/templates/verifyemail';
 import { LogInDto } from './dto/login.dto';
 import { forgotPasswordTemplate } from 'src/mail/templates/forgotpasswor';
+// import { ValidationException } from 'src/exceptions/validation.exception';
+import { validate } from 'class-validator';
 
 @Injectable()
 export class AuthService {
@@ -22,8 +24,7 @@ export class AuthService {
 
   async signUpUser(data: SignUpDto): Promise<object> {
     try {
-      const email = data.email.toLowerCase();
-      if(!data.email || !data.name) {
+      if (data.email === undefined || data.name === undefined) {
         const res = {
           status: 500,
           message: 'name or email missing',
@@ -31,88 +32,40 @@ export class AuthService {
         };
         return res;
       }
-      const user = await this.userModel.findOne({ email: email });
-      const passwordExists = await this.userModel.findOne({
-        email: email,
-        password: { $exists: true },
-      });
-      console.log(passwordExists + ' pass');
+      const email = data.email.toLowerCase();
+      const signUpData = new SignUpDto();
+      signUpData.email = data.email;
+      signUpData.name = data.name;
+      const validationErrors = await validate(signUpData);
+      console.log(validationErrors + ' from validation');
 
-      if (passwordExists != null) {
+      if (validationErrors.length > 0) {
         const res = {
           status: 400,
-          message: 'Account already exists',
+          message: 'Validation failed',
+          data: validationErrors,
         };
         return res;
-      }
-      if (!user) {
-        const newUser = await this.userModel.create(data);
-        if (newUser) {
-          // const otp = this.generateSixDigitCode();
-          // const isSent = await this.mailService.sendEmail(
-          //   data,
-          //   otp,
-          //   verifyEmailTemplate,
-          // );
-          // if (isSent === 'success') {
-          //   const expirationTime = new Date();
-          //   expirationTime.setMinutes(expirationTime.getMinutes() + 2);
-          //   const userVal = await this.userModel.findOneAndUpdate(
-          //     { email: email },
-          //     { otpCode: { otp: otp, expiresIn: expirationTime } },
-          //     { new: true },
-          //   );
-          //   if (userVal) {
-          //     const res = {
-          //       status: 201,
-          //       message: 'Email Sent Successfully',
-          //       data: userVal,
-          //     };
-          //     return res;
-          //   } else {
-          //     const res = {
-          //       status: 400,
-          //       message: 'Email not sent Successfully',
-          //       data: null,
-          //     };
-          //     return res;
-          //   }
-          // }
-          return await this.sendEmails(data, 201, 400, verifyEmailTemplate);
+      } else {
+        const user = await this.userModel.findOne({ email: email });
+        if (user) {
+          if (user.password) {
+            const res = {
+              status: 400,
+              message: 'Account already exists',
+              data: null,
+            };
+            return res;
+          } else {
+            return await this.sendEmails(data, 200, 400, verifyEmailTemplate)
+          }
         }
-      }
-      if (user) {
-        // const otp = this.generateSixDigitCode();
-        // const isSent = await this.mailService.sendEmail(
-        //   data,
-        //   otp,
-        //   verifyEmailTemplate,
-        // );
-        // if (isSent === 'success') {
-        //   const expirationTime = new Date();
-        //   expirationTime.setMinutes(expirationTime.getMinutes() + 2);
-        //   const userVal = await this.userModel.findOneAndUpdate(
-        //     { email: email },
-        //     { otpCode: { otp: otp, expiresIn: expirationTime } },
-        //     { new: true },
-        //   );
-        //   if (userVal) {
-        //     const res = {
-        //       status: 200,
-        //       message: 'Email Sent Successfully',
-        //       data: userVal,
-        //     };
-        //     return res;
-        //   } else {
-        //     const res = {
-        //       status: 400,
-        //       message: 'Email not sent Successfully',
-        //       data: null,
-        //     };
-        //     return res;
-        //   }
-        // }
-        return await this.sendEmails(data,200,400,verifyEmailTemplate);
+        if (!user) {
+          const newUser = await this.userModel.create(data);
+          if (newUser) {
+            return await this.sendEmails(data, 201, 400, verifyEmailTemplate);
+          }
+        }
       }
     } catch (err) {
       console.log(err);
@@ -127,7 +80,7 @@ export class AuthService {
 
   async verifyOtp(email: string, otp: string): Promise<object> {
     try {
-      if(!email || !otp) {
+      if (email === undefined || otp === undefined) {
         const res = {
           status: 500,
           message: 'email or otp missing',
@@ -136,53 +89,77 @@ export class AuthService {
         return res;
       }
       email = email.toLowerCase();
-      const user = await this.userModel.findOne({ email: email });
+      const signUpData = new SignUpDto();
+      signUpData.email = email;
+      const validationErrors = await validate(signUpData);
+      console.log(validationErrors + ' from validation');
 
-      if (!user) {
-        const res = {
-          status: 404,
-          message: 'User not found',
-          data: null,
-        };
-        return res;
-      }
-
-      const storedOtpData = user.otpCode;
-
-      if (!storedOtpData || storedOtpData.otp !== otp) {
+      if (validationErrors.length > 0) {
         const res = {
           status: 400,
-          message: 'Invalid OTP',
-          data: null,
-        };
-        return res;
-      }
-
-      const currentDateTime = new Date();
-      const expirationTime = new Date(storedOtpData.expiresIn);
-
-      if (currentDateTime > expirationTime) {
-        const res = {
-          status: 400,
-          message: 'OTP has expired',
-          data: null,
+          message: 'Validation failed',
+          data: validationErrors,
         };
         return res;
       } else {
-        const isVerified = user.isVerified;
-        if (isVerified === false) {
-          await this.userModel.findOneAndUpdate(
-            { email: email },
-            { isVerified: true },
-            { new: true },
-          );
+        const user = await this.userModel.findOne({ email: email });
+
+        if (!user) {
+          const res = {
+            status: 404,
+            message: 'User not found',
+            data: null,
+          };
+          return res;
         }
-        const res = {
-          status: 200,
-          message: 'email verified',
-          data: null,
-        };
-        return res;
+        if (user) {
+          const storedOtpData = user.otpCode;
+
+          if (!storedOtpData || storedOtpData.otp !== otp) {
+            const res = {
+              status: 400,
+              message: 'Invalid OTP',
+              data: null,
+            };
+            return res;
+          }
+
+          const currentDateTime = new Date();
+          const expirationTime = new Date(storedOtpData.expiresIn);
+
+          if (currentDateTime > expirationTime) {
+            const res = {
+              status: 400,
+              message: 'OTP has expired',
+              data: null,
+            };
+            return res;
+          } else {
+            const isVerified = user.isVerified;
+            if (isVerified === false) {
+              const updateData = await this.userModel.findOneAndUpdate(
+                { email: email },
+                { isVerified: true },
+                { new: true },
+              );
+              if (updateData) {
+                const res = {
+                  status: 200,
+                  message: 'email verified',
+                  data: null,
+                };
+                return res;
+              }
+            } else {
+              const res = {
+                status: 200,
+                message: 'email verified',
+                data: null,
+              };
+              return res;
+            }
+          }
+        }
       }
     } catch (err) {
       console.log(err);
@@ -197,7 +174,7 @@ export class AuthService {
 
   async resendOtp(email: string): Promise<object> {
     try {
-      if(!email) {
+      if (email === undefined) {
         const res = {
           status: 500,
           message: 'email missing',
@@ -206,68 +183,34 @@ export class AuthService {
         return res;
       }
       email = email.toLowerCase();
-      const user = await this.userModel.findOne({ email: email });
-      const passwordExists = await this.userModel.findOne({
-        email: email,
-        password: { $exists: true },
-      });
-      console.log(user + ' user');
-      
-      if (!user) {
+      const signUpData = new SignUpDto();
+      signUpData.email = email;
+      const validationErrors = await validate(signUpData);
+      console.log(validationErrors + ' from validation');
+
+      if (validationErrors.length > 0) {
         const res = {
-          status: 404,
-          message: 'User not found',
-          data: null,
+          status: 400,
+          message: 'Validation failed',
+          data: validationErrors,
         };
         return res;
+      } else {
+        const user = await this.userModel.findOne({ email: email });
+        if (!user) {
+          const res = {
+            status: 404,
+            message: 'User not found',
+            data: null,
+          };
+          return res;
+        }
+        if (user.password) {
+          return await this.sendEmails(user, 200, 400, forgotPasswordTemplate);
+        } else {
+          return await this.sendEmails(user, 200, 400, verifyEmailTemplate);
+        }
       }
-      
-      if (passwordExists === null) {
-        return await this.sendEmails(user,200,400,verifyEmailTemplate);
-       }else{
-        return await this.sendEmails(user,200,400,forgotPasswordTemplate);
-       }
-      // const otp = this.generateSixDigitCode();
-      // const isSent = await this.mailService.sendEmail(
-      //   user,
-      //   otp,
-      //   verifyEmailTemplate,
-      // );
-
-      // if (isSent === 'success') {
-      //   const expirationTime = new Date();
-      //   expirationTime.setMinutes(expirationTime.getMinutes() + 2);
-
-      //   const updatedUser = await this.userModel.findOneAndUpdate(
-      //     { email: email },
-      //     { otpCode: { otp: otp, expiresIn: expirationTime } },
-      //     { new: true },
-      //   );
-
-      //   if (updatedUser) {
-      //     const res = {
-      //       status: 200,
-      //       message: 'OTP resent successfully',
-      //       data: updatedUser,
-      //     };
-      //     return res;
-      //   } else {
-      //     const res = {
-      //       status: 400,
-      //       message: 'Failed to update OTP in the database',
-      //       data: null,
-      //     };
-      //     return res;
-      //   }
-      // } 
-      // else {
-      //   const res = {
-      //     status: 400,
-      //     message: 'Failed to resend OTP via email',
-      //     data: null,
-      //   };
-      //   return res;
-      // }
     } catch (err) {
       console.log(err);
       const res = {
@@ -281,7 +224,7 @@ export class AuthService {
 
   async setPassword(data: LogInDto): Promise<object> {
     try {
-      if(!data.email || !data.password) {
+      if (data.email === undefined || data.password === undefined) {
         const res = {
           status: 500,
           message: 'password or email missing',
@@ -290,37 +233,52 @@ export class AuthService {
         return res;
       }
       const email = data.email.toLowerCase();
-      const user = await this.userModel.findOne({ email });
-      if (!user) {
+      const setPasswordData = new LogInDto();
+      setPasswordData.email = data.email;
+      setPasswordData.password = data.password;
+      const validationErrors = await validate(setPasswordData);
+      console.log(validationErrors + ' from validation');
+
+      if (validationErrors.length > 0) {
         const res = {
-          status: 404,
-          message: 'User not found',
-          data: null,
+          status: 400,
+          message: 'Validation failed',
+          data: validationErrors,
         };
         return res;
-      }
-      if (user.isVerified === true) {
-        const hashedPassword = await bcrypt.hash(data.password, 10);
-        const setPass = await this.userModel.findOneAndUpdate(
-          { email },
-          { password: hashedPassword },
-          { new: true },
-        );
-        if (setPass) {
+      } else {
+        const user = await this.userModel.findOne({ email });
+        if (!user) {
           const res = {
-            status: 200,
-            message: 'Password set successfully',
-            data: setPass,
+            status: 404,
+            message: 'User not found',
+            data: null,
           };
           return res;
         }
-      } else {
-        const res = {
-          status: 400,
-          message: 'Email not verified',
-          data: null,
-        };
-        return res;
+        if (user.isVerified === true) {
+          const hashedPassword = await bcrypt.hash(data.password, 10);
+          const setPass = await this.userModel.findOneAndUpdate(
+            { email },
+            { password: hashedPassword },
+            { new: true },
+          );
+          if (setPass) {
+            const res = {
+              status: 200,
+              message: 'Password set successfully',
+              data: setPass,
+            };
+            return res;
+          }
+        } else {
+          const res = {
+            status: 400,
+            message: 'Email not verified',
+            data: null,
+          };
+          return res;
+        }
       }
     } catch (err) {
       console.log(err);
@@ -335,7 +293,7 @@ export class AuthService {
 
   async forgotPassword(email: string): Promise<object> {
     try {
-      if(!email) {
+      if (email === undefined) {
         const res = {
           status: 500,
           message: 'email missing',
@@ -344,58 +302,38 @@ export class AuthService {
         return res;
       }
       email = email.toLowerCase();
-      // const user = await this.userModel.findOne({ email });
-      const passwordExists = await this.userModel.findOne({
-        email: email,
-        password: { $exists: true },
-      });
-      if (passwordExists === null) {
+      const signUpData = new SignUpDto();
+      signUpData.email = email;
+      const validationErrors = await validate(signUpData);
+      console.log(validationErrors + ' from validation');
+
+      if (validationErrors.length > 0) {
         const res = {
-          status: 404,
-          message: 'Please create your account',
-          data: null,
+          status: 400,
+          message: 'Validation failed',
+          data: validationErrors,
         };
         return res;
       } else {
-        // if (user.isVerified === false || passwordExists === null) {
-        //   const res = {
-        //     status: 400,
-        //     message: 'Please complete your registration',
-        //     data: null,
-        //   };
-        //   return res;
-        // }
-        // const otp = this.generateSixDigitCode();
-        // const isSent = await this.mailService.sendEmail(
-        //   user,
-        //   otp,
-        //   forgotPasswordTemplate,
-        // );
-        // if (isSent === 'success') {
-        //   const expirationTime = new Date();
-        //   expirationTime.setMinutes(expirationTime.getMinutes() + 2);
-        //   const userVal = await this.userModel.findOneAndUpdate(
-        //     { email: email },
-        //     { otpCode: { otp: otp, expiresIn: expirationTime } },
-        //     { new: true },
-        //   );
-        //   if (userVal) {
-        //     const res = {
-        //       status: 200,
-        //       message: 'Email Sent Successfully',
-        //       data: userVal,
-        //     };
-        //     return res;
-        //   } else {
-        //     const res = {
-        //       status: 400,
-        //       message: 'Email not sent Successfully',
-        //       data: null,
-        //     };
-        //     return res;
-        //   }
-        // }
-        return await this.sendEmails(passwordExists,200,400,forgotPasswordTemplate);
+        const passwordExists = await this.userModel.findOne({
+          email: email,
+          password: { $exists: true },
+        });
+        if (passwordExists === null) {
+          const res = {
+            status: 404,
+            message: 'Please create your account',
+            data: null,
+          };
+          return res;
+        } else {
+          return await this.sendEmails(
+            passwordExists,
+            200,
+            400,
+            forgotPasswordTemplate,
+          );
+        }
       }
     } catch (err) {
       console.log(err);
@@ -410,9 +348,8 @@ export class AuthService {
 
   async loginUser(data: LogInDto): Promise<object> {
     try {
-      const email = data.email.toLowerCase();
-      const password = data.password;
-      if(!data.email || !data.password) {
+    
+      if (data.email === undefined || data.password === undefined) {
         const res = {
           status: 500,
           message: 'email or password missing',
@@ -420,52 +357,59 @@ export class AuthService {
         };
         return res;
       }
-      // const user = await this.userModel.findOne({ email });
-      const passwordExists = await this.userModel.findOne({
-        email: email,
-        password: { $exists: true },
-      });
-      if (passwordExists === null) {
+      const email = data.email.toLowerCase();
+      const password = data.password;
+      const setPasswordData = new SignUpDto();
+      setPasswordData.email = data.email;
+      const validationErrors = await validate(setPasswordData);
+      console.log(validationErrors + ' from validation');
+
+      if (validationErrors.length > 0) {
         const res = {
-          status: 404,
-          message: 'Please register yourself',
-          data: null,
+          status: 400,
+          message: 'Validation failed',
+          data: validationErrors,
         };
         return res;
-      }
-      if (passwordExists != null) {
-        console.log(' from login');
-
-        const pass = await bcrypt.compare(password, passwordExists.password);
-        console.log(pass + ' from login');
-        const payload = { id: passwordExists._id };
-        const token = await this.generateJWT.genToken(payload);
-        if (pass) {
+      } else {
+        const passwordExists = await this.userModel.findOne({
+          email: email,
+          password: { $exists: true },
+        });
+        if (passwordExists === null) {
           const res = {
-            status: 200,
-            message: 'Sign-in Successfully',
-            data: passwordExists,
-            token,
-          };
-          return res;
-        }
-        if (!pass) {
-          const res = {
-            status: 400,
-            message: 'Invalid Credentials',
+            status: 404,
+            message: 'Please register yourself',
             data: null,
           };
           return res;
         }
+        if (passwordExists != null) {
+          console.log(' from login');
+
+          const pass = await bcrypt.compare(password, passwordExists.password);
+          console.log(pass + ' from login');
+          const payload = { id: passwordExists._id };
+          const token = await this.generateJWT.genToken(payload);
+          if (pass) {
+            const res = {
+              status: 200,
+              message: 'Sign-in Successfully',
+              data: passwordExists,
+              token,
+            };
+            return res;
+          }
+          if (!pass) {
+            const res = {
+              status: 400,
+              message: 'Invalid Credentials',
+              data: null,
+            };
+            return res;
+          }
+        }
       }
-      // if (!user) {
-      //   const res = {
-      //     status: 400,
-      //     message: 'Invalid Credentials',
-      //     data: null,
-      //   };
-      //   return res;
-      // }
     } catch (err) {
       console.log(err);
       const res = {
@@ -493,7 +437,7 @@ export class AuthService {
     const otp = this.generateSixDigitCode();
     const isSent = await this.mailService.sendEmail(data, otp, template);
     // console.log(isSent +' is sent');
-    
+
     if (isSent === 'success') {
       const expirationTime = new Date();
       expirationTime.setMinutes(expirationTime.getMinutes() + 2);
@@ -513,7 +457,7 @@ export class AuthService {
     } else {
       const res = {
         status: failureStatus,
-        message: 'Email not sent Successfully',
+        message: 'Email not sent',
         data: null,
       };
       return res;
